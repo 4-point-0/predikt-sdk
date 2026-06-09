@@ -36,7 +36,7 @@ export class PrediktSDK {
     if (config.token) this.token = config.token;
     this.http = new HttpClient(config.baseUrl, config.apiKey, () => this.token);
 
-    this.auth = new AuthClient(this.http);
+    this.auth = new AuthClient(this.http, (token) => { this.token = token; });
     this.users = new UsersClient(this.http);
     this.markets = new MarketsClient(this.http);
     this.buy = new BuyClient(this.http);
