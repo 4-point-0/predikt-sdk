@@ -61,5 +61,12 @@ export class PrediktSDK {
   }
 }
 
-export { PrediktApiError } from './error';
+export {
+  PrediktApiError,
+  PrediktValidationError,
+  PrediktAuthError,
+  PrediktNotFoundError,
+  PrediktConflictError,
+  PrediktInternalError,
+} from './error';
 export * from './types';

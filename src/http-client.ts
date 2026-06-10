@@ -1,4 +1,4 @@
-import { PrediktApiError } from './error';
+import { buildApiError } from './error';
 
 /** A single query parameter value — scalars, arrays (repeated keys), or absent. */
 export type QueryParamValue = string | number | boolean | string[];
@@ -24,13 +24,15 @@ export class HttpClient {
   private async handle<T>(res: Response): Promise<T> {
     if (!res.ok) {
       let message = res.statusText;
+      let code: string | undefined;
       try {
-        const body = (await res.json()) as { message?: string | string[] };
+        const body = (await res.json()) as { message?: string | string[]; code?: string };
         if (body.message) {
           message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
         }
+        if (body.code) code = body.code;
       } catch {}
-      throw new PrediktApiError(res.status, message);
+      throw buildApiError(res.status, message, code);
     }
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
