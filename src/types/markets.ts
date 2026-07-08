@@ -58,6 +58,24 @@ export interface FavoritesQuery extends MarketsQuery {
   wallet: string;
 }
 
+export interface MarketDetailsMatchGroup {
+  marketGroupData: {
+    id: string;
+    title: string;
+    description: string;
+    category: MarketCategory;
+    totalVolume: string;
+    totalLiquidity: string;
+  };
+  matchings: MarketDto[];
+}
+
+export interface MarketDetailsResponse {
+  marketDetails: MarketDto;
+  matchGroup?: MarketDetailsMatchGroup;
+  bestOdds: BestOdds;
+}
+
 export interface FavoriteResponse {
   id: string;
   marketId: string;

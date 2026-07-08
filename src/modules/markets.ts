@@ -2,6 +2,7 @@ import { HttpClient, QueryParams } from '../http-client';
 import {
   FavoriteResponse,
   FavoritesQuery,
+  MarketDetailsResponse,
   MarketGroupDetailsDto,
   MarketsQuery,
   PaginatedMarketGroups,
@@ -12,6 +13,11 @@ export class MarketsClient {
 
   list(query?: MarketsQuery): Promise<PaginatedMarketGroups> {
     return this.http.get<PaginatedMarketGroups>('/markets', query as QueryParams);
+  }
+
+  /** Get a single market by its ID, including best odds and optional matched-market group context. */
+  getMarket(id: string): Promise<MarketDetailsResponse> {
+    return this.http.get<MarketDetailsResponse>(`/markets/${id}`);
   }
 
   /** Get a market group by any market ID within the group. Pass `wallet` to populate `isFavourite`. */
