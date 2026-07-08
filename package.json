@@ -2,6 +2,22 @@
   "name": "@predikt/sdk",
   "version": "0.1.0",
   "description": "Official TypeScript SDK for the Predikt prediction-market aggregator",
+  "license": "MIT",
+  "author": "4-Point-0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/4-point-0/predikt-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/4-point-0/predikt-sdk/issues"
+  },
+  "homepage": "https://github.com/4-point-0/predikt-sdk#readme",
+  "keywords": [
+    "predikt",
+    "prediction-market",
+    "sdk",
+    "typescript"
+  ],
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",
@@ -15,7 +31,8 @@
   "files": ["dist", "README.md", "CHANGELOG.md"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.cjs.json",
-    "dev": "tsc -p tsconfig.build.json --watch"
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=18"
