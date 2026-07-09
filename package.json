@@ -1,5 +1,5 @@
 {
-  "name": "@predikt/sdk",
+  "name": "@prediktgg/sdk",
   "version": "0.1.0",
   "description": "Official TypeScript SDK for the Predikt prediction-market aggregator",
   "license": "MIT",

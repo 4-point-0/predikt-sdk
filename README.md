@@ -1,4 +1,4 @@
-# @predikt/sdk
+# @prediktgg/sdk
 
 Official TypeScript SDK for the Predikt prediction-market aggregator. Provides typed access to markets, trading (buy/sell/redeem), orders, positions, price history, and real-time WebSocket updates across Polymarket, Kalshi, and Limitless.
 
@@ -32,11 +32,11 @@ Official TypeScript SDK for the Predikt prediction-market aggregator. Provides t
 ## Installation
 
 ```bash
-npm install @predikt/sdk
+npm install @prediktgg/sdk
 # or
-yarn add @predikt/sdk
+yarn add @prediktgg/sdk
 # or
-pnpm add @predikt/sdk
+pnpm add @prediktgg/sdk
 ```
 
 ---
@@ -46,7 +46,7 @@ pnpm add @predikt/sdk
 Create one `PrediktSDK` instance and reuse it across your application. The SDK holds a single HTTP client and token state shared across all resource clients.
 
 ```typescript
-import { PrediktSDK } from '@predikt/sdk';
+import { PrediktSDK } from '@prediktgg/sdk';
 
 const sdk = new PrediktSDK({
   baseUrl: 'https://api.predikt.xyz',  // base URL of the Predikt API
@@ -90,7 +90,7 @@ The flow has three steps:
 ### Step 1 - Get a challenge
 
 ```typescript
-import { WalletChain } from '@predikt/sdk';
+import { WalletChain } from '@prediktgg/sdk';
 
 const challenge = await sdk.auth.getChallenge(walletAddress, chain);
 ```
@@ -182,7 +182,7 @@ The markets module lets you browse, search, and filter prediction markets. Predi
 Returns a paginated list of market groups. Use this as the main discovery endpoint.
 
 ```typescript
-import { MarketCategory, MarketSortOption, PlatformType, SortOrder } from '@predikt/sdk';
+import { MarketCategory, MarketSortOption, PlatformType, SortOrder } from '@prediktgg/sdk';
 
 // Minimal - fetch the default listing
 const result = await sdk.markets.list();
@@ -363,7 +363,7 @@ Buying positions follows three steps: simulate to check prices, create an order 
 Simulation returns the expected fill across all platforms without committing to an order. Use it to show the user a price preview and to identify which platform offers the best rate before creating an order.
 
 ```typescript
-import { Outcome, PlatformType } from '@predikt/sdk';
+import { Outcome, PlatformType } from '@prediktgg/sdk';
 
 // Minimal - simulate on a specific platform
 const simulation = await sdk.buy.simulate({
@@ -418,7 +418,7 @@ Each `SimulateOrderResponse`:
 Creates the order and returns an unsigned transaction that must be signed and submitted on-chain by the user.
 
 ```typescript
-import { SourceChain } from '@predikt/sdk';
+import { SourceChain } from '@prediktgg/sdk';
 
 // Minimal - only required fields (sourceChain defaults to SOLANA, slippage defaults to 2.5%)
 const { order, transaction, quote } = await sdk.buy.createOrder({
@@ -736,7 +736,7 @@ Key response fields common to all order types:
 Positions represent on-chain token holdings for a wallet. Querying positions does not require authentication - any wallet address can be looked up. All numeric values are already normalized (the 6-decimal division has been applied).
 
 ```typescript
-import { PositionStatus, PlatformType } from '@predikt/sdk';
+import { PositionStatus, PlatformType } from '@prediktgg/sdk';
 
 // Minimal - all positions for a wallet
 const result = await sdk.positions.list({
@@ -1027,7 +1027,7 @@ import {
   PrediktValidationError,
   PrediktConflictError,
   PrediktInternalError,
-} from '@predikt/sdk';
+} from '@prediktgg/sdk';
 
 try {
   await sdk.buy.createOrder({ ... });
@@ -1065,7 +1065,7 @@ try {
 When multiple failures share the same HTTP status, use `code` to distinguish them:
 
 ```typescript
-import { PrediktNotFoundError, PrediktValidationError } from '@predikt/sdk';
+import { PrediktNotFoundError, PrediktValidationError } from '@prediktgg/sdk';
 
 try {
   await sdk.orders.getBuyOrder(orderId);
@@ -1150,7 +1150,7 @@ The aggregator returns these codes in the `code` field:
 If you only need to distinguish API errors from unexpected throws, catching the base class is sufficient:
 
 ```typescript
-import { PrediktApiError } from '@predikt/sdk';
+import { PrediktApiError } from '@prediktgg/sdk';
 
 try {
   await sdk.markets.addFavorite(marketId);
@@ -1190,7 +1190,7 @@ import {
   RedeemOrderStatus, // PENDING | EXECUTING | BRIDGING | SETTLED | FAILED
   PositionStatus,    // OPEN | CLOSED
   MarketMatchType,   // EXACT | RELATED
-} from '@predikt/sdk';
+} from '@prediktgg/sdk';
 ```
 
 ### USDC amounts
