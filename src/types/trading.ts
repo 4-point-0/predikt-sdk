@@ -37,6 +37,8 @@ export interface SimulateOrderResponse {
 
 export type SimulateAllResponse = Partial<Record<PlatformType, SimulateOrderResponse>> & {
   bestPlatform?: PlatformType;
+  /** Calling integrator's fee rate in basis points (100 = 1%). Returned by buy simulate; currently absent on sell simulate. */
+  feeBps?: number;
 };
 
 // ─── Buy ─────────────────────────────────────────────────────────────────────
