@@ -67,6 +67,7 @@ export {
   PrediktAuthError,
   PrediktNotFoundError,
   PrediktConflictError,
+  PrediktRateLimitError,
   PrediktInternalError,
 } from './error';
 export * from './types';

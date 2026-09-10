@@ -32,7 +32,14 @@ export class HttpClient {
         }
         if (body.code) code = body.code;
       } catch {}
-      throw buildApiError(res.status, message, code);
+      const retryAfterRaw = res.headers.get('Retry-After');
+      const retryAfter = retryAfterRaw !== null ? Number(retryAfterRaw) : NaN;
+      throw buildApiError(
+        res.status,
+        message,
+        code,
+        Number.isFinite(retryAfter) ? retryAfter : undefined,
+      );
     }
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
