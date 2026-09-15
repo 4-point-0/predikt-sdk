@@ -8,6 +8,7 @@ import { PriceHistoryClient } from './modules/price-history';
 import { RedeemClient } from './modules/redeem';
 import { SellClient } from './modules/sell';
 import { UsersClient } from './modules/users';
+import { VenuesClient } from './modules/venues';
 import { WebSocketClient } from './modules/websocket';
 
 export interface PrediktSDKConfig {
@@ -27,6 +28,7 @@ export class PrediktSDK {
   readonly orders: OrdersClient;
   readonly positions: PositionsClient;
   readonly priceHistory: PriceHistoryClient;
+  readonly venues: VenuesClient;
   readonly ws: WebSocketClient;
 
   private token: string | undefined;
@@ -45,6 +47,7 @@ export class PrediktSDK {
     this.orders = new OrdersClient(this.http);
     this.positions = new PositionsClient(this.http);
     this.priceHistory = new PriceHistoryClient(this.http);
+    this.venues = new VenuesClient(this.http);
     this.ws = new WebSocketClient();
   }
 
@@ -67,6 +70,7 @@ export {
   PrediktAuthError,
   PrediktNotFoundError,
   PrediktConflictError,
+  PrediktRateLimitError,
   PrediktInternalError,
 } from './error';
 export * from './types';

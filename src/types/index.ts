@@ -5,4 +5,5 @@ export * from './trading';
 export * from './orders';
 export * from './positions';
 export * from './price-history';
+export * from './venues';
 export * from './websocket';

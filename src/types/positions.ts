@@ -11,6 +11,16 @@ export interface PositionMarket {
   startDate: string | null;
   endDate: string | null;
   imageUrl: string | null;
+  /** Groups sibling markets of one multi-outcome event (e.g. election candidates); null for standalone yes/no markets */
+  eventKey: string | null;
+  /** Human-readable title of the parent event; null for standalone markets */
+  eventTitle: string | null;
+  /** This market's outcome label within the event (e.g. a candidate name); null for standalone markets */
+  outcomeLabel: string | null;
+  /** Venue display label for the YES side; null when the venue uses plain Yes/No */
+  yesLabel: string | null;
+  /** Venue display label for the NO side; null when the venue uses plain Yes/No */
+  noLabel: string | null;
 }
 
 export interface PositionResponse {
