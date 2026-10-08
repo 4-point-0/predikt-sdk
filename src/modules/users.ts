@@ -1,5 +1,5 @@
-import { HttpClient } from '../http-client';
-import { ReferralInfo } from '../types/auth';
+import { HttpClient } from '../http-client.js';
+import { ReferralInfo } from '../types/auth.js';
 
 export class UsersClient {
   constructor(private readonly http: HttpClient) {}

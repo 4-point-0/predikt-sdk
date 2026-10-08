@@ -1,5 +1,5 @@
-import { HttpClient, QueryParams } from '../http-client';
-import { PaginatedPositions, PositionResponse, PositionsQuery } from '../types/positions';
+import { HttpClient, QueryParams } from '../http-client.js';
+import { PaginatedPositions, PositionResponse, PositionsQuery } from '../types/positions.js';
 
 export class PositionsClient {
   constructor(private readonly http: HttpClient) {}

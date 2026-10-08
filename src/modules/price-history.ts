@@ -1,10 +1,10 @@
-import { HttpClient, QueryParams } from '../http-client';
+import { HttpClient, QueryParams } from '../http-client.js';
 import {
   MarketPriceHistory,
   MatchedMarketPriceHistoryResponse,
   PriceHistoryDetailsResponse,
   PriceHistoryParams,
-} from '../types/price-history';
+} from '../types/price-history.js';
 
 export class PriceHistoryClient {
   constructor(private readonly http: HttpClient) {}

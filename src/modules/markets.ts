@@ -1,4 +1,4 @@
-import { HttpClient, QueryParams } from '../http-client';
+import { HttpClient, QueryParams } from '../http-client.js';
 import {
   FavoriteResponse,
   FavoritesQuery,
@@ -6,7 +6,7 @@ import {
   MarketGroupDetailsDto,
   MarketsQuery,
   PaginatedMarketGroups,
-} from '../types/markets';
+} from '../types/markets.js';
 
 export class MarketsClient {
   constructor(private readonly http: HttpClient) {}

@@ -1,15 +1,15 @@
-import { HttpClient } from './http-client';
-import { AuthClient } from './modules/auth';
-import { BuyClient } from './modules/buy';
-import { MarketsClient } from './modules/markets';
-import { OrdersClient } from './modules/orders';
-import { PositionsClient } from './modules/positions';
-import { PriceHistoryClient } from './modules/price-history';
-import { RedeemClient } from './modules/redeem';
-import { SellClient } from './modules/sell';
-import { UsersClient } from './modules/users';
-import { VenuesClient } from './modules/venues';
-import { WebSocketClient } from './modules/websocket';
+import { HttpClient } from './http-client.js';
+import { AuthClient } from './modules/auth.js';
+import { BuyClient } from './modules/buy.js';
+import { MarketsClient } from './modules/markets.js';
+import { OrdersClient } from './modules/orders.js';
+import { PositionsClient } from './modules/positions.js';
+import { PriceHistoryClient } from './modules/price-history.js';
+import { RedeemClient } from './modules/redeem.js';
+import { SellClient } from './modules/sell.js';
+import { UsersClient } from './modules/users.js';
+import { VenuesClient } from './modules/venues.js';
+import { WebSocketClient } from './modules/websocket.js';
 
 export interface PrediktSDKConfig {
   baseUrl: string;
@@ -72,5 +72,5 @@ export {
   PrediktConflictError,
   PrediktRateLimitError,
   PrediktInternalError,
-} from './error';
-export * from './types';
+} from './error.js';
+export * from './types/index.js';

@@ -1,6 +1,6 @@
 {
   "name": "@prediktgg/sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Official TypeScript SDK for the Predikt prediction-market aggregator",
   "license": "MIT",
   "author": "4-Point-0",
@@ -23,14 +23,14 @@
   "types": "dist/types/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js",
-      "types": "./dist/types/index.d.ts"
+      "require": "./dist/cjs/index.js"
     }
   },
   "files": ["dist", "README.md", "CHANGELOG.md"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.cjs.json",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
     "dev": "tsc -p tsconfig.build.json --watch",
     "prepublishOnly": "npm run build"
   },

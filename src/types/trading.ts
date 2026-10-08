@@ -1,4 +1,4 @@
-import { BuyOrderStatus, Outcome, PlatformType, RedeemOrderStatus, SellOrderStatus, SourceChain } from './common';
+import { BuyOrderStatus, Outcome, PlatformType, RedeemOrderStatus, SellOrderStatus, SourceChain } from './common.js';
 
 // ─── Simulation ──────────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
-import { HttpClient } from '../http-client';
-import { CreateRedeemOrderResponse, RedeemOrderRequest, RedeemOrderResponse } from '../types/trading';
+import { HttpClient } from '../http-client.js';
+import { CreateRedeemOrderResponse, RedeemOrderRequest, RedeemOrderResponse } from '../types/trading.js';
 
 export class RedeemClient {
   constructor(private readonly http: HttpClient) {}

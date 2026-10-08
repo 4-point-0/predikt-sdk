@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { MarketUpdateEvent, WsEventMap, WsEventName } from '../types/websocket';
+import { MarketUpdateEvent, WsEventMap, WsEventName } from '../types/websocket.js';
 
 type Handler<K extends WsEventName> = (payload: WsEventMap[K]) => void;
 

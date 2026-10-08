@@ -1,4 +1,4 @@
-import { WalletChain } from './common';
+import { WalletChain } from './common.js';
 
 export interface ChallengeRequest {
   walletAddress: string;

@@ -1,4 +1,4 @@
-import { HttpClient } from '../http-client';
+import { HttpClient } from '../http-client.js';
 import {
   BatchBuyOrderResponse,
   BuyOrderRequest,
@@ -6,7 +6,7 @@ import {
   CreateBuyOrderResponse,
   SimulateBuyRequest,
   SimulateAllResponse,
-} from '../types/trading';
+} from '../types/trading.js';
 
 export class BuyClient {
   constructor(private readonly http: HttpClient) {}

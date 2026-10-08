@@ -1,6 +1,6 @@
-import { HttpClient, QueryParams } from '../http-client';
-import { OrdersListQuery } from '../types/orders';
-import { BuyOrderResponse, RedeemOrderResponse, SellOrderResponse } from '../types/trading';
+import { HttpClient, QueryParams } from '../http-client.js';
+import { OrdersListQuery } from '../types/orders.js';
+import { BuyOrderResponse, RedeemOrderResponse, SellOrderResponse } from '../types/trading.js';
 
 export class OrdersClient {
   constructor(private readonly http: HttpClient) {}

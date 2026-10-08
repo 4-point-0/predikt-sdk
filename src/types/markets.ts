@@ -1,4 +1,4 @@
-import { MarketCategory, MarketSortOption, MarketStatus, PlatformType, SortOrder, PaginatedResponse } from './common';
+import { MarketCategory, MarketSortOption, MarketStatus, PlatformType, SortOrder, PaginatedResponse } from './common.js';
 
 export interface MarketDto {
   id: string;

@@ -1,4 +1,4 @@
-import { PlatformType } from './common';
+import { PlatformType } from './common.js';
 
 /** Public venue trading status — `GET /venues/status` (no JWT required). */
 export interface VenueStatus {

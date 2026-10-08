@@ -1,5 +1,5 @@
-import { HttpClient } from '../http-client';
-import { VenueStatus } from '../types/venues';
+import { HttpClient } from '../http-client.js';
+import { VenueStatus } from '../types/venues.js';
 
 export class VenuesClient {
   constructor(private readonly http: HttpClient) {}

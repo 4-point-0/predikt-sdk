@@ -1,6 +1,6 @@
-import { HttpClient } from '../http-client';
-import { ChallengeRequest, ChallengeResponse, VerifyRequest, VerifyResponse } from '../types/auth';
-import { WalletChain } from '../types/common';
+import { HttpClient } from '../http-client.js';
+import { ChallengeRequest, ChallengeResponse, VerifyRequest, VerifyResponse } from '../types/auth.js';
+import { WalletChain } from '../types/common.js';
 
 export class AuthClient {
   constructor(

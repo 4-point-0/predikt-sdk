@@ -1,4 +1,4 @@
-import { buildApiError } from './error';
+import { buildApiError } from './error.js';
 
 /** A single query parameter value — scalars, arrays (repeated keys), or absent. */
 export type QueryParamValue = string | number | boolean | string[];

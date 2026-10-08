@@ -1,4 +1,4 @@
-import { MarketCategory, MarketStatus, Outcome, PaginatedResponse, PlatformType, PositionStatus } from './common';
+import { MarketCategory, MarketStatus, Outcome, PaginatedResponse, PlatformType, PositionStatus } from './common.js';
 
 export interface PositionMarket {
   title: string;
