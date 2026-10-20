@@ -17,6 +17,7 @@ Official TypeScript SDK for the Predikt prediction-market aggregator. Provides t
 - [Price History](#price-history)
 - [WebSocket](#websocket)
 - [Users](#users)
+- [Direct Trading and Polymarket Combos (server-side)](#direct-trading-and-polymarket-combos-server-side)
 - [Error Handling](#error-handling)
 - [Type Reference](#type-reference)
 
@@ -990,6 +991,330 @@ console.log(referral.referralCount);   // number of accounts that used this code
 
 ---
 
+## Direct Trading and Polymarket Combos (server-side)
+
+These namespaces let your backend trade Polymarket on your users' **Privy wallets**: regular markets (`sdk.trading`) and **Polymarket Combos**, Polymarket's parlays (`sdk.combos`). Predikt signs trades through Privy, within limits you approve once per wallet.
+
+> **Server-side only.** Every endpoint below requires a **backend** API key (`sk_predikt_...`); a frontend key gets `403`. Never ship the API key, your Privy App Secret or your owner key to a browser or app.
+
+Some terms used below:
+
+| Term | Meaning |
+|---|---|
+| Privy wallet | An EOA you create in Privy with `owner_id` = your **owner key**. It signs for the Deposit Wallet and never holds trading funds. |
+| Deposit Wallet | Polymarket's smart contract wallet for that Privy wallet (`depositWalletAddress`, also `tradingAddress`). It holds pUSD and positions. **Users fund this address.** |
+| Grant | What you approve for Predikt: `maxBuyAmountPerOrder` and `expiresAt`, for `buy`, `sell`, `redeem` and `cancel`. Combos use the same grant. |
+| Owner key | Your P-256 Privy authorization key. It never leaves your server; you sign approvals with it locally. |
+
+**Units.** pUSD amounts and shares are strings in 6-decimal base units (`"2000000"` = 2 pUSD or 2 shares). Prices are decimal strings (`"0.37"`). Never convert base units to a JS `number`; use `toBaseUnits` / `fromBaseUnits`:
+
+```typescript
+import { toBaseUnits, fromBaseUnits } from '@prediktgg/sdk';
+
+toBaseUnits('2.5');        // "2500000" (throws on more than 6 decimals)
+fromBaseUnits('5054026');  // "5.054026"
+```
+
+**Idempotency is mandatory on every write**: `idempotencyKey` (direct trading, 8–128 chars `[A-Za-z0-9_-]`) or `clientOrderId` (combos, 1–100 chars). Store the key with your own order before calling. Repeating a request with the same key never trades twice. After an order ends `rejected` / `FAILED`, use a **new** key. Never send a new key while an order's outcome is still unknown.
+
+### Setup
+
+```typescript
+import { PrediktSDK } from '@prediktgg/sdk';
+
+const sdk = new PrediktSDK({
+  baseUrl: process.env.PREDIKT_API_URL!,
+  apiKey: process.env.PREDIKT_API_KEY!,  // backend key
+  timeoutMs: 60_000,                     // optional; no timeout by default
+  // retry: { maxRetries: 2, approvalsPendingDelayMs: 15_000 }  // defaults; `false` disables
+});
+```
+
+Calls on `privyApp`, `accounts`, `trading` and `combos` are all idempotent, so the SDK **retries them automatically with the same request** (same key) on:
+
+- network errors and timeouts, and `5xx` errors with `details.retryable: true` and no `details.orderId` (exponential backoff, 2 retries by default). A `5xx` that names a recorded order (`err.orderId`) is returned to you: no funds moved, so check that order and use a **new** key;
+- `409 TRADING_APPROVALS_PENDING`: one-time approvals were submitted on the wallet's first trade but are not confirmed yet (waits 15 s, 3 retries by default).
+
+It never retries other `4xx` errors, `429`, or the older `buy` / `sell` / `redeem` endpoints.
+
+### 1. Connect your Privy app (once)
+
+Before this, Predikt must have your Privy **App Secret** configured (sent through the agreed secure channel). Until then calls fail with `PRIVY_APP_SECRET_NOT_CONFIGURED`.
+
+```typescript
+await sdk.privyApp.connect({ appId: process.env.PRIVY_APP_ID!, environment: 'production' });
+await sdk.privyApp.get();  // { appId, environment, status: 'active' }
+```
+
+### 2. Register a wallet and approve Predikt
+
+Create the Privy wallet with `owner_id` = your owner key quorum, then:
+
+```typescript
+import { verifyAndSignApproval } from '@prediktgg/sdk/server';
+
+const limits = { maxBuyAmountPerOrder: '10000000', expiresAt: '2026-12-15T12:00:00Z' };
+
+// Deploys the Deposit Wallet if needed; the SDK repeats the request while it is `provisioning`.
+const pending = await sdk.accounts.register({ privyWalletId, ...limits });
+
+if (pending.status === 'awaiting_owner_approval') {
+  // Checks the approval against Privy (not Predikt), then signs it locally with your owner key.
+  const signed = await verifyAndSignApproval(pending, {
+    ownerKey: process.env.PRIVY_OWNER_KEY!,          // base64 PKCS#8 ("wallet-auth:..." is fine) or PEM
+    privyAppId: process.env.PRIVY_APP_ID!,
+    privyAppSecret: process.env.PRIVY_APP_SECRET!,
+    expected: { privyWalletId, ...limits },
+  });
+  const account = await sdk.accounts.activate(pending, signed);  // status: 'active'
+}
+```
+
+The returned `TradingAccount` carries both identifiers, `accountId` (direct trading) and `depositWalletAddress` (combos). Every method below accepts it in place of the raw ID or address. Store both.
+
+| `status` | Meaning | Next step |
+|---|---|---|
+| `provisioning` | Deposit Wallet still deploying (returned only if `register` stopped waiting, after 2 min by default) | Call `register` again with the same input |
+| `awaiting_owner_approval` | `approval` is ready (valid 10 minutes). With `activeGrant` set it is a pending re-authorization and the account still trades | `verifyAndSignApproval`, then `activate` |
+| `active` | Tradable | Done |
+| `unavailable` | Suspended or grant expired | `reauthorize` |
+
+`verifyAndSignApproval` is imported from **`@prediktgg/sdk/server`** (Node only; it uses `node:crypto`). It refuses to sign, with an `ApprovalVerificationError` whose `code` names the failed check, unless all of these hold:
+
+1. `approvalDigest` is the SHA-256 of the RFC 8785 canonical JSON of `signaturePayload`. The approval, and the signed request's `privy-request-expiry`, expire within 15 minutes, so the signed update cannot be replayed later.
+2. The payload is a `PATCH` of exactly your wallet in your Privy app that changes only `additional_signers`.
+3. Per Privy's current wallet: the owner is unchanged, every other signer is kept unchanged, no signer except Predikt's is added, and Predikt's signer gets exactly `[policyId]`.
+4. Per Privy's policy: it is owned by the wallet owner, and **every rule is exactly one of Predikt's reviewed rules** (policy profile v4, the same shapes the backend's own policy checker accepts): Polymarket CLOB login for this wallet's address, orders on the Polymarket CTF, NegRisk CTF or Exchange v3 contracts, or batches of this Deposit Wallet. All of them are typed-data signing only (`eth_signTypedData_v4`), on Polygon, and expire (`current_unix_timestamp lt`) no later than your `expiresAt`. Any other rule, condition or field is refused.
+5. The stated buy cap and expiry are not above what you asked for.
+
+Optional pins in `expected` make it stricter: `ownerId` (your owner key quorum), `delegatedSignerId` (Predikt's signer ID, e.g. from your first approval) and `depositWalletAddress`. A new policy profile on Predikt's side needs a matching SDK release; until then this function refuses to sign.
+
+The signature is ECDSA P-256 / SHA-256 over the canonical JSON, DER-encoded, base64. The owner key is used only for that and is never logged, stored or sent.
+
+What you approve: until `expiresAt`, Predikt can sign Polymarket logins and orders, and **Deposit Wallet batches with unrestricted inner calls** (needed for approvals and redemptions). Treat the grant as broad control of the Deposit Wallet's funds for its duration. The buy cap is enforced by Predikt, not by the Privy policy. You remain the owner: removing Predikt's signer from the wallet in Privy revokes access immediately (there is no revoke endpoint).
+
+### 3. Re-authorize (change limits, renew, enable combos)
+
+```typescript
+const next = { maxBuyAmountPerOrder: '20000000', expiresAt: '2027-01-15T12:00:00Z' };
+const pending = await sdk.accounts.reauthorize(account, next);
+const signed = await verifyAndSignApproval(pending, { ownerKey, privyAppId, privyAppSecret, expected: { privyWalletId, ...next } });
+await sdk.accounts.activate(pending, signed);
+```
+
+- Use it to change limits, to renew before `expiresAt` (also works after expiry), and **once for accounts approved before Exchange v3 was added (policy v3)**. Those still trade regular markets but cannot sign combos: combo orders end `FAILED` / `SIGNING_FAILED`. `account.activeGrant.combosEnabled` tells you in advance: `true` = combos work; `null` = unknown (approved before the API recorded policy profiles) or `false` = reauthorize once.
+- **Trading continues under the old grant until activation.** While a re-authorization is pending, `accounts.get` returns `awaiting_owner_approval` with `activeGrant` set to the limits it still trades under (`activeGrant` is `null` for a first registration, after expiry and for suspended accounts). Use `isReauthorizationPending(account)` rather than the status alone:
+
+```typescript
+import { isReauthorizationPending } from '@prediktgg/sdk';
+
+const account = await sdk.accounts.get(accountId);
+account.activeGrant;                 // { maxBuyAmountPerOrder, expiresAt, policyProfile, combosEnabled } | null
+isReauthorizationPending(account);   // true: new limits await your signature, old ones still apply
+```
+- Same limits again returns the same pending approval; different limits replace an unsigned one. `409 TRADING_AUTHORIZATION_APPROVAL_IN_PROGRESS`: finish the pending activation first.
+
+### 4. Balances and positions
+
+```typescript
+const portfolio = await sdk.accounts.portfolio(account);
+portfolio.tradingAddress;   // the Deposit Wallet: users send pUSD on Polygon here
+portfolio.balances.pusd;    // tradable, exact on-chain
+portfolio.balances.usdce;   // USDC.e sent by mistake (not tradable until wrapped)
+portfolio.positions;        // regular positions; null (with positionsError) if Polymarket's service is down
+
+const { markets } = await sdk.accounts.redeemable(account);  // resolved markets with exact payouts
+```
+
+Combo positions are not in the portfolio; use `sdk.combos.positions`.
+
+### 5. Trading regular markets
+
+Orders are **fill-or-kill**: fully filled at or better than the limit price, or nothing.
+
+```typescript
+const buy = await sdk.trading.buy(account, {
+  tokenId,                        // Polymarket outcome token ID
+  amount: '2000000',              // all-in pUSD budget incl. Polymarket's fee; ≤ maxBuyAmountPerOrder
+  slippagePercent: '5',           // optional, 0.1–50, default 5: limit = best ask × (1 + 5%)
+  idempotencyKey: 'casino-order-0001',
+});
+
+const sell = await sdk.trading.sell(account, {
+  tokenId,
+  shares: 'all',                  // base units or "all"; Polymarket's minimum is usually 5 shares
+  idempotencyKey: 'casino-order-0002',
+});
+
+// Fallback only: Polymarket usually redeems resolved positions on its own.
+const redemption = await sdk.trading.redeem(account, { conditionId, idempotencyKey: 'casino-redeem-0001' });
+```
+
+| `status` | Final | Funds moved | What to do |
+|---|---|---|---|
+| `filled` | yes, once amounts are set | yes | Settle: debit `spentAmount` (buy), credit `receivedAmount` (sell) |
+| `redeemed` | yes | yes | Credit `receivedAmount` |
+| `rejected` | yes | no | Release the reservation; retry with a **new** key if wanted (`reasonCode` says why) |
+| `pending`, `submitting`, `submitted` | no | pending | Keep funds reserved; poll |
+| `unknown` | no | maybe | Keep funds reserved; poll; **never** place a replacement order |
+
+A `filled` order can have `null` amounts for a few seconds. `waitForOrder` polls until the order is final (`isDirectOrderFinal`):
+
+```typescript
+// Transient poll failures (network, 429, 5xx) are skipped, not thrown.
+const settled = await sdk.trading.waitForOrder(account, buy, { timeoutMs: 120_000 });
+if (settled.status === 'filled') debitUser(settled.spentAmount!);
+else if (settled.status === 'rejected') releaseReservation();
+else keepReservedAndPollLater(settled);  // a timeout is NOT a failure
+```
+
+Predikt reconciles `submitted` / `unknown` orders against the chain: first after about 10 minutes, then at growing intervals up to hourly. No settlement after an hour → `rejected` (`NOT_FILLED_ONCHAIN`). Unresolved after 24 hours → `reasonCode: RECONCILE_EXHAUSTED` (manual review; keep it pending).
+
+**Order change feed.** Automatic redemptions by Polymarket (`side: 'redeem'`, `source: 'polymarket_auto'`) appear only here, within about 10 minutes. Store the cursor and poll:
+
+```typescript
+let cursor = await loadCursor(account.accountId);
+for await (const page of sdk.trading.iterateOrderChanges(account, { cursor })) {
+  for (const order of page.orders) await applyOnce(order);  // the same order can appear again
+  if (page.nextCursor) await saveCursor(account.accountId, (cursor = page.nextCursor));
+}
+```
+
+Filters: `side` (`buy | sell | redeem`), `source` (`integrator | polymarket_auto`), `limit` 1–100. Single page: `sdk.trading.listOrderChanges(account, query)`. Single order: `sdk.trading.getOrder(account, orderId)`.
+
+### 6. Polymarket Combos
+
+A combo is one ticket over 2–50 legs (a market and an outcome). It pays 1 pUSD per share only if **every** leg wins (a voided leg can produce a partial payout). Prices come from market makers through an RFQ. The account must have an active, unexpired **policy-v4** grant: check `account.activeGrant?.combosEnabled === true`, and reauthorize once if it is `null` or `false` (see re-authorize above). Polymarket allows **15 RFQs per minute per wallet** (`429` above that; back off).
+
+```typescript
+import type { ComboLeg } from '@prediktgg/sdk';
+
+// Eligible markets (ordered by volume). `outcomes`, `prices`, `positionIds` align by index.
+const { markets, nextCursor } = await sdk.combos.listMarkets({ limit: 50 });
+for await (const market of sdk.combos.iterateMarkets()) { /* every market */ }
+
+const legs: ComboLeg[] = [
+  { marketId: '682708', outcome: 0 },   // 0 = first outcome (usually Yes)
+  { marketId: '1090496', outcome: 1 },
+];
+
+// Indicative price (product of leg prices). Real quotes are usually a bit higher.
+const quote = await sdk.combos.quote({ legs, amount: '2000000' });
+
+const order = await sdk.combos.buy({
+  wallet: account,                      // or account.depositWalletAddress
+  legs,
+  amount: '2000000',                    // pUSD budget incl. fees; never exceeded
+  maxPrice: '0.41',                     // max price per share incl. fees, e.g. indicative + 10%
+  clientOrderId: 'casino-combo-0001',
+});
+// Waits ~15 s for the fill: FILLED, FAILED (see order.error.code) or EXECUTING.
+const final = await sdk.combos.waitForOrder(order);
+// Keep final.comboConditionId: it is needed to sell and redeem.
+```
+
+Cash out (only combos bought through Predikt) and the redemption fallback:
+
+```typescript
+await sdk.combos.sell({
+  wallet: account,
+  comboConditionId: final.comboConditionId!,
+  shares: final.shares!,                // base units
+  minPrice: '0.30',                     // min net price per share after fees
+  clientOrderId: 'casino-combo-sell-0001',
+  allowPartialFill: false,              // default
+});
+
+// Normally Polymarket pays out resolved combos automatically (see accounting below).
+await sdk.combos.redeem({ wallet: account, comboConditionId, clientOrderId: 'casino-combo-redeem-0001' });
+```
+
+Market makers round to 2 decimals, so a "full" cash-out can leave ~0.008 shares. Very small sells can get `INVALID_RFQ`.
+
+**`clientOrderId` reuse.** Keys are unique per integrator across all combo orders (buys, sells, redemptions and automatic payouts). Repeating the same request returns the original order; reusing a key for a different request (direction, wallet, amount or shares, price limit, `allowPartialFill`, legs or combo) throws `PrediktConflictError` with code `COMBO_CLIENT_ORDER_ID_REUSED`, `details.orderId` (the existing order) and `details.mismatch`. Nothing is placed. Older API versions returned the existing order instead; the SDK compares it as well and throws the same error with `details.raisedBy: 'sdk'`.
+
+| `status` | What to do |
+|---|---|
+| `PENDING` | Transient; poll |
+| `EXECUTING` | Quote accepted (or redemption submitted), waiting for the chain. Keep funds reserved; poll `getOrder`. Never place a replacement |
+| `FILLED` | Done; amounts final. Settle with the user |
+| `FAILED` | Nothing traded; `error.code` says why. Release funds; retry with a **new** `clientOrderId` if wanted |
+
+Common `FAILED` codes: `NO_QUOTES` (no maker quoted; often succeeds a minute later), `PRICE_ABOVE_MAX` / `PRICE_BELOW_MIN`, `QUOTE_EXPIRED`, `SIGNING_FAILED` (policy v3, signer removed, grant expired or buy above the cap), Polymarket codes such as `CONTRADICTORY_LEGS`, `SIZE_TOO_LARGE`, `INVALID_RFQ`, and for redemptions `COMBO_ALREADY_REDEEMED`, `COMBO_REDEMPTION_REJECTED`, `COMBO_REDEMPTION_FAILED`. Quotes succeed more often with legs priced ~0.4–0.6 from unrelated events; avoid lottery legs (< ~0.02) and near-certain tickets (> ~0.85).
+
+Reads:
+
+```typescript
+await sdk.combos.getOrder(id);
+await sdk.combos.listOrders({ wallet: account, status: 'FILLED', limit: 20, offset: 0 });  // newest first
+for await (const o of sdk.combos.iterateOrders({ wallet: account })) { /* all pages */ }
+
+// Polymarket data API, passed through unchanged (snake_case):
+await sdk.combos.positions({ wallet: account, status: 'REDEEMABLE' });
+await sdk.combos.activity({ wallet: account });   // not for accounting: no cash-outs, float amounts
+```
+
+`listOrders` is **not** a change feed: an existing order's status change does not move it. Poll pending orders with `getOrder`; detect new automatic payouts by listing and processing ids you have not seen.
+
+### 7. Payout accounting
+
+Process each order ID exactly once.
+
+| Event | Source of truth |
+|---|---|
+| Direct buy debit | `spentAmount` of the `filled` buy |
+| Direct sell credit | `receivedAmount` of the `filled` sell |
+| Direct payout | `receivedAmount` of `redeemed` orders, **both** `source` values (`integrator`, `polymarket_auto`) |
+| Combo buy debit | `amount` of the `FILLED` BUY |
+| Combo cash-out credit | `amount` of the `FILLED` SELL |
+| Combo payout | `amount` of `FILLED` REDEEM orders, **both** sources (`API`, `POLYMARKET_AUTO`) |
+
+Automatic payouts: Polymarket redeems resolved positions on its own. Predikt records each as an order: direct `side: 'redeem'`, `source: 'polymarket_auto'` (in `iterateOrderChanges`); combos `direction: 'REDEEM'`, `source: 'POLYMARKET_AUTO'`, `clientOrderId: 'polymarket-auto:<txHash>'` (in `listOrders`, scanned every 10 minutes). If your own redeem loses the race: direct ends `rejected` with `REDEEMED_BY_POLYMARKET`, combos end `FAILED` with `COMBO_ALREADY_REDEEMED`; the payout is on the automatic order.
+
+### 8. Error codes
+
+All errors are `PrediktApiError` subclasses (see [Error Handling](#error-handling)); branch on `code`. Errors raised after an order was recorded carry `details.orderId` (`err.orderId`); provider outages carry `details.retryable` (`err.retryable`).
+
+| Code | Meaning |
+|---|---|
+| `PRIVY_APP_NOT_CONNECTED` | Call `privyApp.connect` first |
+| `PRIVY_APP_ALREADY_CONNECTED` | A different Privy app is connected (one per integrator) |
+| `PRIVY_APP_SECRET_NOT_CONFIGURED`, `PRIVY_AUTHORIZATION_KEY_NOT_CONFIGURED` | Predikt has not configured your credentials yet |
+| `PRIVY_SETUP_OWNER_REQUIRED`, `PRIVY_SETUP_OWNER_UNSUPPORTED` | The wallet needs your owner key as `owner_id` |
+| `TRADING_ACCOUNT_PROVISIONING_FAILED` | Deposit Wallet setup failed (reason in the message) |
+| `TRADING_AUTHORIZATION_EXISTS` | Different limits on an existing grant: use `reauthorize` |
+| `TRADING_AUTHORIZATION_APPROVAL_IN_PROGRESS` | Finish the pending activation first |
+| `AUTHORIZATION_SETUP_APPROVAL_EXPIRED`, `AUTHORIZATION_SETUP_APPROVAL_CHANGED` | Request a fresh approval and sign it |
+| `PRIVY_SETUP_REJECTED` | Privy rejected the signature (wrong key or modified payload) |
+| `TRADING_ACCOUNT_NOT_AWAITING_APPROVAL` | Nothing to activate |
+| `TRADING_AUTHORIZATION_NOT_ACTIVE`, `TRADING_AUTHORIZATION_EXPIRED` (403) | No active grant: `reauthorize` |
+| `IDEMPOTENCY_KEY_REUSED` (409) | Same direct `idempotencyKey`, different order |
+| `SLIPPAGE_OUT_OF_RANGE`, `BUY_AUTHORIZATION_CAP_EXCEEDED`, `BUY_BUDGET_EXCEEDED`, `INSUFFICIENT_BALANCE`, `INSUFFICIENT_SHARES`, `ORDER_TOO_SMALL` (400) | Bad direct order input |
+| `INSUFFICIENT_LIQUIDITY` (409) | Empty side of the book |
+| `PRIVY_SIGNING_DENIED` (403) | Policy refused: signer removed or policy changed |
+| `EXECUTION_AUTHORIZATION_CHANGED` (409) | Grant changed during preparation; retry |
+| `MARKET_NOT_RESOLVED` (409), `NOTHING_TO_REDEEM` (400), `REDEMPTION_REJECTED` (409) | Direct redeem |
+| `INVALID_CURSOR` (400) | Bad change-feed cursor |
+| `TRADING_APPROVALS_PENDING` (409) | First-trade approvals not confirmed yet (retried automatically) |
+| `COMBO_WALLET_NOT_ALLOWED` (403) | Wallet is not an active trading account of yours |
+| `COMBO_INVALID_AMOUNT`, `COMBO_INVALID_PRICE`, `COMBO_DUPLICATE_MARKET`, `COMBO_MARKET_NOT_FOUND`, `COMBO_MARKET_NOT_ENABLED` (400) | Bad combo input or legs |
+| `COMBO_POSITION_NOT_FOUND` (404) | Sell/redeem without a filled buy through Predikt |
+| `COMBO_NOT_REDEEMABLE` (409) | Not all legs resolved yet, or already paid out |
+| `COMBO_ORDER_NOT_FOUND` (404) | Unknown combo order ID |
+| `COMBO_CLIENT_ORDER_ID_REUSED` (409) | `clientOrderId` belongs to a different combo order (`details.orderId`, `details.mismatch`) |
+| `POLYMARKET_DATA_UNAVAILABLE`, `PRIVY_SIGNING_UNAVAILABLE`, `POLYMARKET_RATE_LIMITED` (503) | Provider issue; see `retryable` |
+
+### 9. Testing
+
+[TESTING.md](TESTING.md) has the exact steps for every level:
+
+- `npm test`: unit tests;
+- `npm run test:contract`: the built SDK against the backend's real controllers, validation and mappers (needs the backend checkout next to this repo, or `BACKEND_DIR`);
+- a package check before publishing;
+- `scripts/e2e-checklist.mjs`: the backend's end-to-end checklist against the real API with a test Privy wallet. It spends real funds **only** with `E2E_TRADE=1`.
+
+---
+
 ## Error Handling
 
 All HTTP errors throw a subclass of `PrediktApiError`. The SDK maps each HTTP status to a dedicated typed class, so you can catch errors either broadly (any API error) or precisely (a specific status category). Every error carries a `code` string — a machine-readable identifier from the aggregator that lets you branch on the exact failure reason without parsing message text.
@@ -1002,20 +1327,25 @@ All HTTP errors throw a subclass of `PrediktApiError`. The SDK maps each HTTP st
 | `PrediktAuthError` | `401` or `403` | Not authenticated, token expired, or action is forbidden |
 | `PrediktNotFoundError` | `404` | Requested resource does not exist |
 | `PrediktConflictError` | `409` | Conflict with current state (e.g. item already exists) |
+| `PrediktRateLimitError` | `429` | Rate limit exceeded; `retryAfter` holds the `Retry-After` seconds when sent |
 | `PrediktInternalError` | `500` | Server-side failure |
+| `PrediktServiceUnavailableError` | `503` | A provider (Privy, Polymarket) is unavailable; check `retryable` |
 | `PrediktApiError` | any other | Base class - also the fallback for unlisted status codes |
 
 All subclasses extend `PrediktApiError`, so catching the base class still catches everything.
 
 ### Error properties
 
-Every error exposes three properties:
+Every error exposes these properties:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `status` | `number` | HTTP status code |
+| `status` | `number` | HTTP status code (`statusCode` is an alias) |
 | `message` | `string` | Human-readable description of what went wrong |
 | `code` | `string \| undefined` | Machine-readable error code from the aggregator (e.g. `ORDER_NOT_FOUND`) - present on all errors originating from the Predikt API |
+| `details` | `PrediktErrorDetails \| undefined` | Extra fields some errors carry, e.g. `{ orderId, retryable }` |
+| `orderId` | `string \| undefined` | `details.orderId`: an order recorded before the error. Poll it instead of placing a new one |
+| `retryable` | `boolean \| undefined` | `details.retryable`: whether repeating the same request may succeed |
 
 ### Catching by type
 
@@ -1165,7 +1495,9 @@ try {
 
 ### Network errors
 
-Errors where no HTTP response is received (DNS failure, connection refused, timeout) throw the native `TypeError` from `fetch` and are not wrapped in any `PrediktApiError` subclass. Handle them separately if your environment requires it.
+Errors where no HTTP response is received (DNS failure, connection refused) throw the native `TypeError` from `fetch` and are not wrapped in any `PrediktApiError` subclass; a `timeoutMs` timeout throws the native `TimeoutError`. Handle them separately if your environment requires it.
+
+For `privyApp`, `accounts`, `trading` and `combos` calls the SDK first retries these errors itself with the same request (see [Direct Trading and Polymarket Combos](#setup)). If the error still reaches you after a write, the outcome is unknown: repeat the call with the **same** idempotency key or `clientOrderId`, never a new one.
 
 ---
 

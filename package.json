@@ -1,6 +1,6 @@
 {
   "name": "@prediktgg/sdk",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Official TypeScript SDK for the Predikt prediction-market aggregator",
   "license": "MIT",
   "author": "4-Point-0",
@@ -21,18 +21,34 @@
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "server": [
+        "dist/types/server.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
+    },
+    "./server": {
+      "types": "./dist/types/server.d.ts",
+      "import": "./dist/esm/server.js",
+      "require": "./dist/cjs/server.js"
     }
   },
   "files": ["dist", "README.md", "CHANGELOG.md"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
     "dev": "tsc -p tsconfig.build.json --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:contract": "npm run build && node contract/run.mjs"
   },
   "engines": {
     "node": ">=18"
@@ -43,6 +59,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.7"
   }
 }

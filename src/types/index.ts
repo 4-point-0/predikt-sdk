@@ -7,3 +7,5 @@ export * from './positions.js';
 export * from './price-history.js';
 export * from './venues.js';
 export * from './websocket.js';
+export * from './direct.js';
+export * from './combos.js';
