@@ -1093,7 +1093,7 @@ Optional pins in `expected` make it stricter: `ownerId` (your owner key quorum),
 
 The signature is ECDSA P-256 / SHA-256 over the canonical JSON, DER-encoded, base64. The owner key is used only for that and is never logged, stored or sent.
 
-What you approve: until `expiresAt`, Predikt can sign Polymarket logins and orders, and **Deposit Wallet batches with unrestricted inner calls** (needed for approvals and redemptions). Treat the grant as broad control of the Deposit Wallet's funds for its duration. The buy cap is enforced by Predikt, not by the Privy policy. You remain the owner: removing Predikt's signer from the wallet in Privy revokes access immediately (there is no revoke endpoint).
+What you approve: until `expiresAt`, Predikt can sign Polymarket logins and orders, and **Deposit Wallet batches with unrestricted inner calls** (needed for approvals, redemptions and withdrawals; Predikt only ever sends withdrawals to your own Privy wallet, but that limit is enforced by Predikt, not by the policy). Treat the grant as broad control of the Deposit Wallet's funds for its duration. The buy cap is enforced by Predikt, not by the Privy policy. You remain the owner: removing Predikt's signer from the wallet in Privy revokes access immediately (there is no revoke endpoint).
 
 ### 3. Re-authorize (change limits, renew, enable combos)
 
@@ -1130,6 +1130,21 @@ const { markets } = await sdk.accounts.redeemable(account);  // resolved markets
 
 Combo positions are not in the portfolio; use `sdk.combos.positions`.
 
+**Withdraw.** Moves pUSD from the Deposit Wallet to the account's own **Privy wallet**, the only possible destination (it cannot be set in the request). From there you move the funds with Privy as usual.
+
+```typescript
+const withdrawal = await sdk.trading.withdraw(account, {
+  amount: '5000000',                     // base units, or 'all' for the whole balance
+  idempotencyKey: 'casino-withdraw-0001',
+});
+const done = await sdk.trading.waitForOrder(account, withdrawal);
+// done.side === 'withdraw'; 'withdrawn' → done.amount is the exact pUSD moved, done.transactionHashes the transfer
+```
+
+- No fees: Polymarket's relayer pays the gas. Any active, unexpired grant allows withdrawals.
+- Before anything is submitted: `400 NOTHING_TO_WITHDRAW` (no pUSD) or `400 INSUFFICIENT_BALANCE` (`amount` above the balance). `409 WITHDRAWAL_REJECTED`: the relayer refused, nothing moved. A submitted transfer that reverted ends `rejected` with `reasonCode: WITHDRAWAL_FAILED`.
+- Do not withdraw funds reserved for orders that are still `submitted` or `unknown`.
+
 ### 5. Trading regular markets
 
 Orders are **fill-or-kill**: fully filled at or better than the limit price, or nothing.
@@ -1156,6 +1171,7 @@ const redemption = await sdk.trading.redeem(account, { conditionId, idempotencyK
 |---|---|---|---|
 | `filled` | yes, once amounts are set | yes | Settle: debit `spentAmount` (buy), credit `receivedAmount` (sell) |
 | `redeemed` | yes | yes | Credit `receivedAmount` |
+| `withdrawn` | yes | yes | Withdrawal settled: `amount` pUSD is in your Privy wallet |
 | `rejected` | yes | no | Release the reservation; retry with a **new** key if wanted (`reasonCode` says why) |
 | `pending`, `submitting`, `submitted` | no | pending | Keep funds reserved; poll |
 | `unknown` | no | maybe | Keep funds reserved; poll; **never** place a replacement order |
@@ -1182,7 +1198,7 @@ for await (const page of sdk.trading.iterateOrderChanges(account, { cursor })) {
 }
 ```
 
-Filters: `side` (`buy | sell | redeem`), `source` (`integrator | polymarket_auto`), `limit` 1–100. Single page: `sdk.trading.listOrderChanges(account, query)`. Single order: `sdk.trading.getOrder(account, orderId)`.
+Filters: `side` (`buy | sell | redeem | withdraw`), `source` (`integrator | polymarket_auto`), `limit` 1–100. Single page: `sdk.trading.listOrderChanges(account, query)`. Single order: `sdk.trading.getOrder(account, orderId)`.
 
 ### 6. Polymarket Combos
 
@@ -1267,6 +1283,7 @@ Process each order ID exactly once.
 | Direct buy debit | `spentAmount` of the `filled` buy |
 | Direct sell credit | `receivedAmount` of the `filled` sell |
 | Direct payout | `receivedAmount` of `redeemed` orders, **both** `source` values (`integrator`, `polymarket_auto`) |
+| Withdrawal | `amount` of the `withdrawn` withdraw order |
 | Combo buy debit | `amount` of the `FILLED` BUY |
 | Combo cash-out credit | `amount` of the `FILLED` SELL |
 | Combo payout | `amount` of `FILLED` REDEEM orders, **both** sources (`API`, `POLYMARKET_AUTO`) |
@@ -1295,6 +1312,7 @@ All errors are `PrediktApiError` subclasses (see [Error Handling](#error-handlin
 | `PRIVY_SIGNING_DENIED` (403) | Policy refused: signer removed or policy changed |
 | `EXECUTION_AUTHORIZATION_CHANGED` (409) | Grant changed during preparation; retry |
 | `MARKET_NOT_RESOLVED` (409), `NOTHING_TO_REDEEM` (400), `REDEMPTION_REJECTED` (409) | Direct redeem |
+| `NOTHING_TO_WITHDRAW` (400), `INSUFFICIENT_BALANCE` (400), `WITHDRAWAL_REJECTED` (409) | Withdraw |
 | `INVALID_CURSOR` (400) | Bad change-feed cursor |
 | `TRADING_APPROVALS_PENDING` (409) | First-trade approvals not confirmed yet (retried automatically) |
 | `COMBO_WALLET_NOT_ALLOWED` (403) | Wallet is not an active trading account of yours |

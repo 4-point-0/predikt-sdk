@@ -23,6 +23,43 @@ describe('trading writes', () => {
       ['POST', `${BASE}/redeem`, { conditionId: `0x${'ab'.repeat(32)}`, idempotencyKey: 'casino-redeem-0001' }],
     ]);
   });
+
+  it('withdraws an amount or "all" with the documented body', async () => {
+    const { calls } = mockFetch(() =>
+      json(200, directOrder({ side: 'withdraw', status: 'withdrawn', tokenId: null, amount: '3000000' })),
+    );
+    const client = sdk();
+    const withdrawn = await client.trading.withdraw(approvalAccount(), { amount: '3000000', idempotencyKey: 'withdraw-test-0001' });
+    await client.trading.withdraw(ACCOUNT_ID, { amount: 'all', idempotencyKey: 'withdraw-test-0002', extra: 1 } as never);
+    expect(calls.map((c) => [c.method, c.url.pathname, c.body])).toEqual([
+      ['POST', `${BASE}/withdraw`, { amount: '3000000', idempotencyKey: 'withdraw-test-0001' }],
+      ['POST', `${BASE}/withdraw`, { amount: 'all', idempotencyKey: 'withdraw-test-0002' }],
+    ]);
+    expect(isDirectOrderFinal(withdrawn)).toBe(true);
+  });
+
+  it('retries a withdrawal after a network error with the same idempotency key', async () => {
+    let attempt = 0;
+    const { calls } = mockFetch(() => {
+      if (attempt++ === 0) throw new TypeError('fetch failed');
+      return json(200, directOrder({ side: 'withdraw', status: 'withdrawn', tokenId: null }));
+    });
+    await sdk({ retry: { baseDelayMs: 1 } }).trading.withdraw(ACCOUNT_ID, { amount: 'all', idempotencyKey: 'withdraw-test-0003' });
+    expect(calls).toHaveLength(2);
+    expect(calls.map((c) => c.body)).toEqual([
+      { amount: 'all', idempotencyKey: 'withdraw-test-0003' },
+      { amount: 'all', idempotencyKey: 'withdraw-test-0003' },
+    ]);
+  });
+
+  it('surfaces NOTHING_TO_WITHDRAW as a typed 400 without retrying', async () => {
+    const { calls } = mockFetch(() => apiError(400, 'NOTHING_TO_WITHDRAW'));
+    await expect(sdk().trading.withdraw(ACCOUNT_ID, { amount: 'all', idempotencyKey: 'withdraw-test-0004' })).rejects.toMatchObject({
+      status: 400,
+      code: 'NOTHING_TO_WITHDRAW',
+    });
+    expect(calls).toHaveLength(1);
+  });
 });
 
 describe('order reads', () => {
@@ -78,6 +115,8 @@ describe('isDirectOrderFinal', () => {
     [directOrder({ side: 'sell', status: 'filled', receivedAmount: '1939700' }), true],
     [directOrder({ side: 'sell', status: 'filled', receivedAmount: null }), false],
     [directOrder({ side: 'redeem', status: 'redeemed', receivedAmount: '2836735' }), true],
+    [directOrder({ side: 'withdraw', status: 'withdrawn', tokenId: null, spentAmount: null }), true],
+    [directOrder({ side: 'withdraw', status: 'submitting', tokenId: null, spentAmount: null }), false],
     [directOrder({ status: 'submitted' }), false],
     [directOrder({ status: 'unknown' }), false],
     [directOrder({ status: 'pending' }), false],

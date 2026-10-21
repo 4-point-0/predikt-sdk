@@ -6,6 +6,7 @@ import {
   DirectOrderChangesPage,
   DirectRedeemRequest,
   DirectSellOrderRequest,
+  DirectWithdrawRequest,
   ListDirectOrderChangesQuery,
 } from '../types/direct.js';
 import { isDirectOrderFinal } from '../utils/order-status.js';
@@ -49,6 +50,18 @@ export class TradingClient {
   async redeem(account: AccountRef, body: DirectRedeemRequest): Promise<DirectOrder> {
     return this.write(account, '/redeem', {
       conditionId: body.conditionId,
+      idempotencyKey: body.idempotencyKey,
+    });
+  }
+
+  /**
+   * Moves pUSD from the Deposit Wallet to the account's own Privy wallet (the destination is
+   * fixed by Predikt). Returns an order with `side: 'withdraw'`; `withdrawn` means the transfer
+   * settled and `amount` is the exact pUSD moved. Gasless, no fees.
+   */
+  async withdraw(account: AccountRef, body: DirectWithdrawRequest): Promise<DirectOrder> {
+    return this.write(account, '/withdraw', {
+      amount: body.amount,
       idempotencyKey: body.idempotencyKey,
     });
   }

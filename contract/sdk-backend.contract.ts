@@ -13,6 +13,7 @@ import { getAddress } from 'viem';
 import {
   ConflictException,
   ServiceUnavailableException,
+  ValidationException,
 } from '@/common/exceptions';
 import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter';
 import { IntegratorContextService } from '@/modules/integrators';
@@ -28,6 +29,7 @@ import { PrivyAppService } from '@/modules/trading-accounts/services/privy-app.s
 import { TradingAccountOnboardingService } from '@/modules/trading-accounts/services/trading-account-onboarding.service';
 import { TradingAccountPortfolioService } from '@/modules/trading-accounts/services/trading-account-portfolio.service';
 import { DirectRedeemService } from '@/modules/trading-accounts/services/direct-redeem.service';
+import { DirectWithdrawService } from '@/modules/trading-accounts/services/direct-withdraw.service';
 import { TradingAccountRedeemableService } from '@/modules/trading-accounts/services/trading-account-redeemable.service';
 import { DirectBuyService } from '@/modules/trading-accounts/services/direct-buy.service';
 import { DirectSellService } from '@/modules/trading-accounts/services/direct-sell.service';
@@ -74,6 +76,7 @@ const mocks = {
   onboarding: { register: jest.fn(), get: jest.fn(), activate: jest.fn(), reauthorize: jest.fn() },
   portfolio: { get: jest.fn() },
   redeem: { redeem: jest.fn() },
+  withdraw: { withdraw: jest.fn() },
   redeemable: { get: jest.fn() },
   buy: { buy: jest.fn() },
   sell: { sell: jest.fn() },
@@ -116,6 +119,7 @@ beforeAll(async () => {
       { provide: TradingAccountOnboardingService, useValue: mocks.onboarding },
       { provide: TradingAccountPortfolioService, useValue: mocks.portfolio },
       { provide: DirectRedeemService, useValue: mocks.redeem },
+      { provide: DirectWithdrawService, useValue: mocks.withdraw },
       { provide: TradingAccountRedeemableService, useValue: mocks.redeemable },
       { provide: DirectBuyService, useValue: mocks.buy },
       { provide: DirectSellService, useValue: mocks.sell },
@@ -389,6 +393,31 @@ describe('direct trading', () => {
     expect(mocks.buy.buy.mock.calls[0].slice(1)).toEqual([ACCOUNT_ID, { tokenId: '5511', amount: '2000000', slippagePercent: '2.5', idempotencyKey: 'casino-order-0001' }]);
     expect(mocks.sell.sell.mock.calls[0][2]).toEqual({ tokenId: '5511', shares: 'all', idempotencyKey: 'casino-order-0002' });
     expect(mocks.redeem.redeem.mock.calls[0][2]).toEqual({ conditionId: `0x${'ab'.repeat(32)}`, idempotencyKey: 'casino-redeem-0001' });
+  });
+
+  it('withdraw passes DTO validation ("all" or base units) and maps withdrawal errors', async () => {
+    mocks.withdraw.withdraw.mockResolvedValue(order({ side: 'withdraw', status: 'withdrawn', tokenId: null, amount: '3000000', spentAmount: null, filledShares: null }));
+    const sdk = client();
+    const withdrawn = await sdk.trading.withdraw(ACCOUNT_ID, { amount: '3000000', idempotencyKey: 'withdraw-test-0001' });
+    await sdk.trading.withdraw(ACCOUNT_ID, { amount: 'all', idempotencyKey: 'withdraw-test-0002' });
+    expect(withdrawn).toMatchObject({ side: 'withdraw', status: 'withdrawn', amount: '3000000' });
+    expect(sdkLib.isDirectOrderFinal(withdrawn)).toBe(true);
+    expect(mocks.withdraw.withdraw.mock.calls.map((c: unknown[]) => c.slice(1))).toEqual([
+      [ACCOUNT_ID, { amount: '3000000', idempotencyKey: 'withdraw-test-0001' }],
+      [ACCOUNT_ID, { amount: 'all', idempotencyKey: 'withdraw-test-0002' }],
+    ]);
+
+    const badAmount = await failure(sdk.trading.withdraw(ACCOUNT_ID, { amount: '0', idempotencyKey: 'withdraw-test-0003' }));
+    expect(badAmount).toBeInstanceOf(sdkLib.PrediktValidationError);
+
+    mocks.withdraw.withdraw.mockRejectedValueOnce(new ValidationException('NOTHING_TO_WITHDRAW', { userMessage: 'The Deposit Wallet holds no pUSD.' }));
+    const nothing = await failure(sdk.trading.withdraw(ACCOUNT_ID, { amount: 'all', idempotencyKey: 'withdraw-test-0004' }));
+    expect([nothing.status, nothing.code]).toEqual([400, 'NOTHING_TO_WITHDRAW']);
+
+    mocks.withdraw.withdraw.mockRejectedValueOnce(new ConflictException('WITHDRAWAL_REJECTED', { userMessage: 'Relayer refused.' }));
+    const rejected = await failure(sdk.trading.withdraw(ACCOUNT_ID, { amount: '1000000', idempotencyKey: 'withdraw-test-0005' }));
+    expect(rejected).toBeInstanceOf(sdkLib.PrediktConflictError);
+    expect(rejected.code).toBe('WITHDRAWAL_REJECTED');
   });
 
   it('invalid input is a typed 400 (no retry)', async () => {

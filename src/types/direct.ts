@@ -228,15 +228,16 @@ export interface RedeemableMarkets {
 
 // ─── Direct orders ───────────────────────────────────────────────────────────
 
-export type DirectOrderSide = 'buy' | 'sell' | 'redeem';
+/** `withdraw`: pUSD moved from the Deposit Wallet to the account's own Privy wallet. */
+export type DirectOrderSide = 'buy' | 'sell' | 'redeem' | 'withdraw';
 
 /** `integrator`: your request. `polymarket_auto`: a redemption Polymarket made on its own. */
 export type DirectOrderSource = 'integrator' | 'polymarket_auto';
 
 /**
- * Final: `rejected` (no funds moved), `filled` and `redeemed` (once their amounts are set).
- * Not final: `pending`, `submitting`, `submitted`, `unknown` — keep funds reserved and poll;
- * never place a replacement for an `unknown` order. See `isDirectOrderFinal`.
+ * Final: `rejected` (no funds moved), `withdrawn`, and `filled` / `redeemed` (once their amounts
+ * are set). Not final: `pending`, `submitting`, `submitted`, `unknown` — keep funds reserved and
+ * poll; never place a replacement for an `unknown` order. See `isDirectOrderFinal`.
  */
 export type DirectOrderStatus =
   | 'pending'
@@ -244,6 +245,7 @@ export type DirectOrderStatus =
   | 'submitted'
   | 'filled'
   | 'redeemed'
+  | 'withdrawn'
   | 'rejected'
   | 'unknown';
 
@@ -270,6 +272,17 @@ export interface DirectSellOrderRequest {
 export interface DirectRedeemRequest {
   /** Resolved market; all held outcomes are redeemed. */
   conditionId: string;
+  idempotencyKey: string;
+}
+
+/**
+ * Moves pUSD from the Deposit Wallet to the account's own Privy wallet, the only possible
+ * destination.
+ */
+export interface DirectWithdrawRequest {
+  /** pUSD in base units, or "all" for the whole balance (read on-chain when requested). */
+  amount: string;
+  /** 8–128 chars `[A-Za-z0-9_-]`. Repeating it returns the original withdrawal. */
   idempotencyKey: string;
 }
 
@@ -320,12 +333,15 @@ export interface DirectOrder {
   side: DirectOrderSide;
   source: DirectOrderSource;
   status: DirectOrderStatus;
-  /** Buy/sell outcome token; null for redemptions. */
+  /** Buy/sell outcome token; null for redemptions and withdrawals. */
   tokenId: string | null;
   /** Redemptions only. */
   conditionId: string | null;
   redeemedPositions: DirectRedeemedPosition[] | null;
-  /** Buy: requested pUSD. Sell: shares requested. Redeem: shares held. Base units. */
+  /**
+   * Buy: requested pUSD. Sell: shares requested. Redeem: shares held. Withdraw: exact pUSD moved
+   * (resolved for "all"). Base units.
+   */
   amount: string;
   /** Buy: pUSD planned for shares after the fee reserve. */
   principal: string | null;
@@ -342,7 +358,10 @@ export interface DirectOrder {
   /** Exact shares bought/sold. */
   filledShares: string | null;
   transactionHashes: string[];
-  /** Why it was rejected or is pending, e.g. `FOK_NOT_FILLED`, `RECONCILE_EXHAUSTED`. */
+  /**
+   * Why it was rejected or is pending, e.g. `FOK_NOT_FILLED`, `WITHDRAWAL_FAILED`,
+   * `RECONCILE_EXHAUSTED`.
+   */
   reasonCode: string | null;
   fees: DirectOrderFees | null;
 }

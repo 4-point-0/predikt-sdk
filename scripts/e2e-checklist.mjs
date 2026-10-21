@@ -22,6 +22,8 @@
  *   E2E_DIRECT_AMOUNT        direct buy budget, base units (default 2000000; Polymarket rejects buys under $1
  *                            after the ~3% fee reserve, and under ~5 shares)
  *   E2E_REDEEM_CONDITION_ID  direct redeem of a resolved market held by the wallet
+ *   E2E_WITHDRAW_AMOUNT      withdraw this much pUSD (base units, or "all") to the Privy wallet, as the
+ *                            last step; the funds then sit in the Privy wallet, not the Deposit Wallet
  *
  * Usage: cp e2e.env.example e2e.env (fill it in), then
  *   npm run build && node --env-file=e2e.env scripts/e2e-checklist.mjs
@@ -62,6 +64,7 @@ const env = {
   tokenId: optional('E2E_TOKEN_ID'),
   directAmount: optional('E2E_DIRECT_AMOUNT', '2000000'),
   redeemConditionId: optional('E2E_REDEEM_CONDITION_ID'),
+  withdrawAmount: optional('E2E_WITHDRAW_AMOUNT'),
 };
 
 const EXCHANGE_V3 = '0xe3333700ca9d93003f00f0f71f8515005f6c00aa';
@@ -330,6 +333,18 @@ await step('11/12', 'Combo payouts recorded so far (REDEEM orders, both sources)
   }
   return `POLYMARKET_AUTO ${counts.POLYMARKET_AUTO ?? 0}, API ${counts.API ?? 0} (resolve a combo and re-run to verify)`;
 });
+
+// Last, so the trading steps above still have the funds.
+await step('13', 'Withdraw pUSD to the Privy wallet', async () => {
+  if (!env.withdrawAmount) return 'SKIP: set E2E_WITHDRAW_AMOUNT';
+  const account = requireAccount();
+  const before = await sdk.accounts.portfolio(account);
+  const withdrawal = await sdk.trading.withdraw(account, { amount: env.withdrawAmount, idempotencyKey: `e2e-withdraw-${run}` });
+  const done = await sdk.trading.waitForOrder(account, withdrawal);
+  check(done.side === 'withdraw' && done.status === 'withdrawn', `withdraw ${done.status} ${done.reasonCode ?? ''}`);
+  const after = await sdk.accounts.portfolio(account);
+  return `withdrew ${fromBaseUnits(done.amount)} pUSD to the Privy wallet (tx ${done.transactionHashes[0]}); Deposit Wallet ${fromBaseUnits(before.balances.pusd)} → ${fromBaseUnits(after.balances.pusd)}`;
+}, { trade: true });
 
 console.log('\nSummary');
 console.table(results);

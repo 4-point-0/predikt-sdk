@@ -9,7 +9,8 @@ All notable changes to this project will be documented in this file.
   - `sdk.privyApp` — `connect`, `get`.
   - `sdk.accounts` — `register` (repeats the request while the Deposit Wallet is
     `provisioning`), `get`, `activate`, `reauthorize`, `portfolio`, `redeemable`.
-  - `sdk.trading` — `buy`, `sell`, `redeem`, `getOrder`, `listOrderChanges`,
+  - `sdk.trading` — `buy`, `sell`, `redeem`, `withdraw` (pUSD to the account's own Privy
+    wallet; `side: 'withdraw'`, status `withdrawn`), `getOrder`, `listOrderChanges`,
     `iterateOrderChanges` (cursor change feed), `waitForOrder`.
 - Polymarket Combos: `sdk.combos` — `listMarkets`, `iterateMarkets`, `quote`, `buy`, `sell`,
   `redeem`, `getOrder`, `listOrders`, `iterateOrders`, `positions`, `activity`, `waitForOrder`.

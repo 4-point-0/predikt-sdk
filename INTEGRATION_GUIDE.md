@@ -349,7 +349,7 @@ await db.users.update(userId, {
 > [!WARNING]
 > Never sign an approval without `verifyAndSignApproval` (or the same checks done yourself). It is what guarantees that Predikt only gets the narrow, time-limited signer you agreed to.
 
-**What you approve.** Until `expiresAt`, Predikt can sign Polymarket logins and orders, and Deposit Wallet batches with unrestricted inner calls (used for approvals and redemptions). Treat the grant as broad control of the Deposit Wallet's funds for its duration. Predikt checks `maxBuyAmountPerOrder` before signing every buy; for combos it applies to the amount before fees, so the fee (around 3%) can come on top.
+**What you approve.** Until `expiresAt`, Predikt can sign Polymarket logins and orders, and Deposit Wallet batches with unrestricted inner calls (used for approvals, redemptions and withdrawals; Predikt only ever sends withdrawals to your own Privy wallet, a limit Predikt enforces, not the policy). Treat the grant as broad control of the Deposit Wallet's funds for its duration. Predikt checks `maxBuyAmountPerOrder` before signing every buy; for combos it applies to the amount before fees, so the fee (around 3%) can come on top.
 
 ### 5.5 Fund the Deposit Wallet
 
@@ -361,6 +361,21 @@ portfolio.balances.pusd;    // tradable, exact on-chain (base units)
 portfolio.balances.usdce;   // USDC.e sent by mistake: visible, but not tradable
 portfolio.positions;        // regular positions (combos: predikt.combos.positions)
 ```
+
+**Withdraw.** Moves pUSD from the Deposit Wallet to the account's own **Privy wallet** (the wallet you registered). That is the only possible destination; it cannot be set in the request. From there you move the funds with Privy as usual.
+
+```typescript
+const withdrawal = await predikt.trading.withdraw(account, {
+  amount: 'all',                              // or base units, e.g. '5000000'
+  idempotencyKey: `withdraw-${myWithdrawal.id}`,
+});
+const done = await predikt.trading.waitForOrder(account, withdrawal);
+if (done.status === 'withdrawn') {
+  // done.amount: exact pUSD moved; done.transactionHashes[0]: the Polygon transfer
+}
+```
+
+No fees, and any active, unexpired grant allows it. `400 NOTHING_TO_WITHDRAW` / `400 INSUFFICIENT_BALANCE` mean nothing was recorded; `409 WITHDRAWAL_REJECTED` means the relayer refused and nothing moved. Do not withdraw funds you still hold reserved for `submitted` or `unknown` orders.
 
 ### 5.6 Direct trading (single Polymarket outcomes)
 
@@ -392,6 +407,7 @@ if (sold.status === 'filled') await creditUser(sold.receivedAmount!);   // net o
 | --- | --- | --- |
 | `filled` | Yes, once amounts are set | Settle: debit `spentAmount` (buy), credit `receivedAmount` (sell) |
 | `redeemed` | Yes | Credit `receivedAmount` |
+| `withdrawn` | Yes | Withdrawal settled: `amount` pUSD is in your Privy wallet |
 | `rejected` | Yes | Release; nothing moved. Retry only with a **new** key |
 | `pending`, `submitting`, `submitted` | No | Keep reserved; poll |
 | `unknown` | No | Keep reserved; poll; **never** place a replacement |
@@ -505,6 +521,7 @@ Process each order id **exactly once**.
 | Direct buy debit | `spentAmount` of the `filled` buy |
 | Direct sell credit | `receivedAmount` of the `filled` sell |
 | Direct payout | `receivedAmount` of `redeemed` orders, **both** sources (`integrator`, `polymarket_auto`) |
+| Withdrawal | `amount` of the `withdrawn` withdraw order |
 | Combo buy debit | `amount` of the `FILLED` BUY |
 | Combo cash-out credit | `amount` of the `FILLED` SELL |
 | Combo payout | `amount` of `FILLED` REDEEM orders, **both** sources (`API`, `POLYMARKET_AUTO`) |

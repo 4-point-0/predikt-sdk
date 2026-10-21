@@ -11,12 +11,13 @@ export function isReauthorizationPending(account: TradingAccount): boolean {
 }
 
 /**
- * True when a direct order will not change any more: `rejected`, or `filled`/`redeemed` with its
- * settlement amount set (`spentAmount` for buys, `receivedAmount` otherwise). A `filled` order can
- * briefly have null amounts; keep polling until they are set.
+ * True when a direct order will not change any more: `rejected`, `withdrawn` (its `amount` is
+ * exact), or `filled`/`redeemed` with its settlement amount set (`spentAmount` for buys,
+ * `receivedAmount` otherwise). A `filled` order can briefly have null amounts; keep polling until
+ * they are set.
  */
 export function isDirectOrderFinal(order: DirectOrder): boolean {
-  if (order.status === 'rejected') return true;
+  if (order.status === 'rejected' || order.status === 'withdrawn') return true;
   if (order.status !== 'filled' && order.status !== 'redeemed') return false;
   return (order.side === 'buy' ? order.spentAmount : order.receivedAmount) !== null;
 }

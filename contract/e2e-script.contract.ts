@@ -29,6 +29,7 @@ import { PrivyAppService } from '@/modules/trading-accounts/services/privy-app.s
 import { TradingAccountOnboardingService } from '@/modules/trading-accounts/services/trading-account-onboarding.service';
 import { TradingAccountPortfolioService } from '@/modules/trading-accounts/services/trading-account-portfolio.service';
 import { DirectRedeemService } from '@/modules/trading-accounts/services/direct-redeem.service';
+import { DirectWithdrawService } from '@/modules/trading-accounts/services/direct-withdraw.service';
 import { TradingAccountRedeemableService } from '@/modules/trading-accounts/services/trading-account-redeemable.service';
 import { DirectBuyService } from '@/modules/trading-accounts/services/direct-buy.service';
 import { DirectSellService } from '@/modules/trading-accounts/services/direct-sell.service';
@@ -180,6 +181,7 @@ const providers = [
   { provide: DirectBuyService, useValue: { buy: async (_c: unknown, _id: string, i: any) => directOrder('buy', i.idempotencyKey, { amount: i.amount, spentAmount: '1000000' }) } },
   { provide: DirectSellService, useValue: { sell: async (_c: unknown, _id: string, i: any) => directOrder('sell', i.idempotencyKey, { side: 'sell', amount: '5000000', receivedAmount: '990000' }) } },
   { provide: DirectRedeemService, useValue: { redeem: async (_c: unknown, _id: string, i: any) => directOrder('redeem', i.idempotencyKey, { status: 'rejected', reasonCode: 'REDEEMED_BY_POLYMARKET', tokenId: null, conditionId: i.conditionId }) } },
+  { provide: DirectWithdrawService, useValue: { withdraw: async (_c: unknown, _id: string, i: any) => directOrder('withdraw', i.idempotencyKey, { status: 'withdrawn', tokenId: null, amount: i.amount === 'all' ? '5000000' : i.amount, filledShares: null, transactionHashes: ['0xwithdraw'] }) } },
   { provide: DirectOrderLifecycleService, useValue: { get: async (_i: string, _a: string, id: string) => directOrders.get(id)?.view } },
   { provide: DirectOrderQueryService, useValue: { list: async () => ({ orders: [...directOrders.values()].map((o) => o.view), nextCursor: 'c1', hasMore: false }) } },
   {
@@ -261,16 +263,18 @@ async function runScript(extraEnv: Record<string, string>) {
 }
 
 it('runs the whole checklist with trading enabled, then again (re-run safe)', async () => {
-  const first = await runScript({ E2E_TRADE: '1', E2E_TOKEN_ID: '5511', E2E_REDEEM_CONDITION_ID: `0x${'cd'.repeat(32)}` });
+  const first = await runScript({ E2E_TRADE: '1', E2E_TOKEN_ID: '5511', E2E_REDEEM_CONDITION_ID: `0x${'cd'.repeat(32)}`, E2E_WITHDRAW_AMOUNT: 'all' });
   console.log(first.out);
   expect(first.code).toBe(0);
   expect(first.out).not.toContain('✗');
-  for (const id of ['1', '2', '3', '4', '5r', '5', '6', '7', '7b', '10', '8', '9', '11/12']) expect(first.out).toMatch(new RegExp(`✓ ${id.replace('/', '\\/')} `));
+  for (const id of ['1', '2', '3', '4', '5r', '5', '6', '7', '7b', '10', '8', '9', '11/12', '13']) expect(first.out).toMatch(new RegExp(`✓ ${id.replace('/', '\\/')} `));
   expect(activations).toEqual(['2000000', '3000000', '2000000']);
+  expect(first.out).toMatch(/✓ 13 Withdraw pUSD to the Privy wallet — withdrew 5 pUSD to the Privy wallet \(tx 0xwithdraw\)/);
 
   const kept = await runScript({ E2E_TRADE: '1', E2E_KEEP_COMBO: '1' });
   expect(kept.code).toBe(0);
   expect(kept.out).toMatch(/- 8 Combo sell \(full cash-out\): skipped \(E2E_KEEP_COMBO=1 keeps combo 0x03d3/);
+  expect(kept.out).toContain('- 13 Withdraw pUSD to the Privy wallet: skipped (set E2E_WITHDRAW_AMOUNT)');
 
   const second = await runScript({});
   console.log(second.out);
