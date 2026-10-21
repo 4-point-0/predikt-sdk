@@ -30,7 +30,9 @@ All notable changes to this project will be documented in this file.
   `PrediktServiceUnavailableError` (503).
 - Helpers: `toBaseUnits`, `fromBaseUnits`, `isDirectOrderFinal`, `isComboOrderFinal`.
 - Unit tests (`npm test`), contract tests against the backend code (`npm run test:contract`),
-  `scripts/e2e-checklist.mjs` for a live end-to-end check, and `TESTING.md`.
+  and `scripts/e2e-checklist.mjs` for a live end-to-end check.
+- `INTEGRATION_GUIDE.md` (shipped in the package): step-by-step guide for integrating Polymarket
+  Combos and direct trading on Privy wallets.
 
 ### Changed
 - `baseUrl` with a path prefix (e.g. `https://host/api`) is now kept for GET requests too, and a

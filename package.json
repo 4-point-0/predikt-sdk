@@ -40,7 +40,7 @@
       "require": "./dist/cjs/server.js"
     }
   },
-  "files": ["dist", "README.md", "CHANGELOG.md"],
+  "files": ["dist", "README.md", "CHANGELOG.md", "INTEGRATION_GUIDE.md"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
     "dev": "tsc -p tsconfig.build.json --watch",

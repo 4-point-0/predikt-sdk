@@ -2,6 +2,8 @@
 
 Official TypeScript SDK for the Predikt prediction-market aggregator. Provides typed access to markets, trading (buy/sell/redeem), orders, positions, price history, and real-time WebSocket updates across Polymarket, Kalshi, and Limitless.
 
+> **Integrating Polymarket Combos or direct trading on Privy wallets?** Start with the step-by-step **[Integration guide](https://github.com/4-point-0/predikt-sdk/blob/main/INTEGRATION_GUIDE.md)** (also shipped in the package as `INTEGRATION_GUIDE.md`).
+
 ## Table of Contents
 
 - [Requirements](#requirements)
@@ -1033,13 +1035,13 @@ const sdk = new PrediktSDK({
 Calls on `privyApp`, `accounts`, `trading` and `combos` are all idempotent, so the SDK **retries them automatically with the same request** (same key) on:
 
 - network errors and timeouts, and `5xx` errors with `details.retryable: true` and no `details.orderId` (exponential backoff, 2 retries by default). A `5xx` that names a recorded order (`err.orderId`) is returned to you: no funds moved, so check that order and use a **new** key;
-- `409 TRADING_APPROVALS_PENDING`: one-time approvals were submitted on the wallet's first trade but are not confirmed yet (waits 15 s, 3 retries by default).
+- `409 TRADING_APPROVALS_PENDING`: one-time approvals were submitted on the wallet's first trade but are not confirmed yet (waits 15 s, 3 retries by default). For combos nothing is recorded before this error, so the repeat completes the order. A direct order is already recorded as `rejected` at that point, so the repeat returns that `rejected` order (`reasonCode: TRADING_APPROVALS_PENDING`): place it again with a **new** `idempotencyKey`.
 
 It never retries other `4xx` errors, `429`, or the older `buy` / `sell` / `redeem` endpoints.
 
 ### 1. Connect your Privy app (once)
 
-Before this, Predikt must have your Privy **App Secret** configured (sent through the agreed secure channel). Until then calls fail with `PRIVY_APP_SECRET_NOT_CONFIGURED`.
+Before this, Predikt must have your Privy **App Secret** configured (sent through the agreed secure channel). Until then calls fail with `500 INTERNAL_ERROR` (`PrediktInternalError`).
 
 ```typescript
 await sdk.privyApp.connect({ appId: process.env.PRIVY_APP_ID!, environment: 'production' });
@@ -1077,7 +1079,7 @@ The returned `TradingAccount` carries both identifiers, `accountId` (direct trad
 | `provisioning` | Deposit Wallet still deploying (returned only if `register` stopped waiting, after 2 min by default) | Call `register` again with the same input |
 | `awaiting_owner_approval` | `approval` is ready (valid 10 minutes). With `activeGrant` set it is a pending re-authorization and the account still trades | `verifyAndSignApproval`, then `activate` |
 | `active` | Tradable | Done |
-| `unavailable` | Suspended or grant expired | `reauthorize` |
+| `unavailable` | Grant expired, or account suspended | `reauthorize` (expired grants only; a suspended account needs Predikt) |
 
 `verifyAndSignApproval` is imported from **`@prediktgg/sdk/server`** (Node only; it uses `node:crypto`). It refuses to sign, with an `ApprovalVerificationError` whose `code` names the failed check, unless all of these hold:
 
@@ -1279,7 +1281,6 @@ All errors are `PrediktApiError` subclasses (see [Error Handling](#error-handlin
 |---|---|
 | `PRIVY_APP_NOT_CONNECTED` | Call `privyApp.connect` first |
 | `PRIVY_APP_ALREADY_CONNECTED` | A different Privy app is connected (one per integrator) |
-| `PRIVY_APP_SECRET_NOT_CONFIGURED`, `PRIVY_AUTHORIZATION_KEY_NOT_CONFIGURED` | Predikt has not configured your credentials yet |
 | `PRIVY_SETUP_OWNER_REQUIRED`, `PRIVY_SETUP_OWNER_UNSUPPORTED` | The wallet needs your owner key as `owner_id` |
 | `TRADING_ACCOUNT_PROVISIONING_FAILED` | Deposit Wallet setup failed (reason in the message) |
 | `TRADING_AUTHORIZATION_EXISTS` | Different limits on an existing grant: use `reauthorize` |
@@ -1302,16 +1303,15 @@ All errors are `PrediktApiError` subclasses (see [Error Handling](#error-handlin
 | `COMBO_NOT_REDEEMABLE` (409) | Not all legs resolved yet, or already paid out |
 | `COMBO_ORDER_NOT_FOUND` (404) | Unknown combo order ID |
 | `COMBO_CLIENT_ORDER_ID_REUSED` (409) | `clientOrderId` belongs to a different combo order (`details.orderId`, `details.mismatch`) |
-| `POLYMARKET_DATA_UNAVAILABLE`, `PRIVY_SIGNING_UNAVAILABLE`, `POLYMARKET_RATE_LIMITED` (503) | Provider issue; see `retryable` |
+| `PRIVY_SIGNING_UNAVAILABLE`, `CLOB_CREDENTIALS_UNAVAILABLE`, `TRADING_APPROVALS_FAILED`, `POLYMARKET_RATE_LIMITED`, `POSITIONS_UNAVAILABLE` (503) | Provider issue on direct trading; see `retryable` |
+| `INTERNAL_ERROR` (500) | Unexpected failure. Also returned when your Privy App Secret is not configured yet, and on combo calls while Polymarket's market or data API is unavailable (retry later). With `err.orderId`, check that order first |
 
 ### 9. Testing
 
-[TESTING.md](TESTING.md) has the exact steps for every level:
-
 - `npm test`: unit tests;
 - `npm run test:contract`: the built SDK against the backend's real controllers, validation and mappers (needs the backend checkout next to this repo, or `BACKEND_DIR`);
-- a package check before publishing;
-- `scripts/e2e-checklist.mjs`: the backend's end-to-end checklist against the real API with a test Privy wallet. It spends real funds **only** with `E2E_TRADE=1`.
+- `npm pack --dry-run`: package check before publishing;
+- `scripts/e2e-checklist.mjs`: end-to-end checklist against the real API with a test Privy wallet. Copy `e2e.env.example` to `e2e.env`, fill it in, then `npm run build && node --env-file=e2e.env scripts/e2e-checklist.mjs`. It spends real funds **only** with `E2E_TRADE=1`; the script header lists every option.
 
 ---
 
