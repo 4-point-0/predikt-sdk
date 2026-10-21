@@ -692,13 +692,13 @@ const buyOrder    = await sdk.orders.getBuyOrder('order-id');
 const sellOrder   = await sdk.orders.getSellOrder('order-id');
 const redeemOrder = await sdk.orders.getRedeemOrder('order-id');
 
-// Fetch a list of orders (no pagination - returns all by default)
-const buyOrders    = await sdk.orders.listBuyOrders();
+// Fetch a list of orders: { items, total }, newest first
+const { items, total } = await sdk.orders.listBuyOrders();
 const sellOrders   = await sdk.orders.listSellOrders();
 const redeemOrders = await sdk.orders.listRedeemOrders();
 
-// With pagination
-const buyOrders = await sdk.orders.listBuyOrders({ limit: 50, offset: 0 });
+// With pagination; more pages exist while offset + items.length < total
+const page = await sdk.orders.listBuyOrders({ limit: 50, offset: 0 });
 ```
 
 **Pagination parameters - `OrdersListQuery` (all optional):**

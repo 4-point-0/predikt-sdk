@@ -34,6 +34,10 @@ All notable changes to this project will be documented in this file.
 - `INTEGRATION_GUIDE.md` (shipped in the package): step-by-step guide for integrating Polymarket
   Combos and direct trading on Privy wallets.
 
+### Fixed
+- `orders.listBuyOrders`, `listSellOrders` and `listRedeemOrders` are now typed as the API's
+  `{ items, total }` envelope (`OrdersListResponse<T>`); they were typed as plain arrays.
+
 ### Changed
 - `baseUrl` with a path prefix (e.g. `https://host/api`) is now kept for GET requests too, and a
   trailing slash no longer produces `//` in request paths.

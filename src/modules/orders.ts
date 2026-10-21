@@ -1,5 +1,5 @@
 import { HttpClient, QueryParams } from '../http-client.js';
-import { OrdersListQuery } from '../types/orders.js';
+import { OrdersListQuery, OrdersListResponse } from '../types/orders.js';
 import { BuyOrderResponse, RedeemOrderResponse, SellOrderResponse } from '../types/trading.js';
 
 export class OrdersClient {
@@ -9,23 +9,23 @@ export class OrdersClient {
     return this.http.get<BuyOrderResponse>(`/orders/buy/${id}`);
   }
 
-  listBuyOrders(query?: OrdersListQuery): Promise<BuyOrderResponse[]> {
-    return this.http.get<BuyOrderResponse[]>('/orders/buy', query as QueryParams);
+  listBuyOrders(query?: OrdersListQuery): Promise<OrdersListResponse<BuyOrderResponse>> {
+    return this.http.get<OrdersListResponse<BuyOrderResponse>>('/orders/buy', query as QueryParams);
   }
 
   getSellOrder(id: string): Promise<SellOrderResponse> {
     return this.http.get<SellOrderResponse>(`/orders/sell/${id}`);
   }
 
-  listSellOrders(query?: OrdersListQuery): Promise<SellOrderResponse[]> {
-    return this.http.get<SellOrderResponse[]>('/orders/sell', query as QueryParams);
+  listSellOrders(query?: OrdersListQuery): Promise<OrdersListResponse<SellOrderResponse>> {
+    return this.http.get<OrdersListResponse<SellOrderResponse>>('/orders/sell', query as QueryParams);
   }
 
   getRedeemOrder(id: string): Promise<RedeemOrderResponse> {
     return this.http.get<RedeemOrderResponse>(`/orders/redeem/${id}`);
   }
 
-  listRedeemOrders(query?: OrdersListQuery): Promise<RedeemOrderResponse[]> {
-    return this.http.get<RedeemOrderResponse[]>('/orders/redeem', query as QueryParams);
+  listRedeemOrders(query?: OrdersListQuery): Promise<OrdersListResponse<RedeemOrderResponse>> {
+    return this.http.get<OrdersListResponse<RedeemOrderResponse>>('/orders/redeem', query as QueryParams);
   }
 }
