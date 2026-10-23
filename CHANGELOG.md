@@ -43,6 +43,14 @@ All notable changes to this project will be documented in this file.
 - `baseUrl` with a path prefix (e.g. `https://host/api`) is now kept for GET requests too, and a
   trailing slash no longer produces `//` in request paths.
 
+### Security
+- The `ws` dependency now requires `^8.21.1` (was `^8.18.0`), so installs can no longer resolve a
+  `ws` affected by GHSA-96hv-2xvq-fx4p (memory exhaustion DoS from tiny fragments) or
+  GHSA-58qx-3vcg-4xpx (uninitialized memory disclosure in `close()`).
+- Development only (not shipped): `vitest` 4.1.12, which drops the vulnerable `tinypool`
+  (GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr) and fixes GHSA-82fw-gwwq-j7x9 and
+  GHSA-qxg6-89mg-rqv8. Running the tests now needs Node.js `^20.19.0 || >=22.12.0`.
+
 ## [0.1.2] - 2026-10-08
 
 ### Fixed
