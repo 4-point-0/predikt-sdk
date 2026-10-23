@@ -30,7 +30,7 @@ Choose **Model A** if your users connect their own Sui or Solana wallet. Choose 
 
 ## 2. Set up the SDK
 
-**Requirements:** Node.js 18+ (or any modern browser for Model A and market data). TypeScript 5+ recommended.
+**Requirements:** Node.js 18+ (or any modern browser for Model A and market data); the latest 22.x or 24.x LTS release is recommended, since Node.js 18 and 20 are end-of-life and get no security fixes. TypeScript 5+ recommended.
 
 ```bash
 npm install @prediktgg/sdk

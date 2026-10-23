@@ -27,7 +27,7 @@ Official TypeScript SDK for the Predikt prediction-market aggregator. Provides t
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 18 (recommended: the latest 22.x or 24.x LTS release; Node.js 18 and 20 are end-of-life and get no security fixes)
 - TypeScript >= 5 (recommended; plain JS works too)
 
 ---
